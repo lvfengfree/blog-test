@@ -303,7 +303,7 @@ class ScreenshotSelector:
             cropped = self.screenshot.crop((x1, y1, x2, y2))
             return cropped
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to capture area: {str(e)}")
+            print(f"Warning: Failed to capture area: {str(e)}")
             return None
     
     def save_image(self, image, filename=None):
