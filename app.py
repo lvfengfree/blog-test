@@ -1,7 +1,15 @@
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, session, send_file
 import pymysql
 from flask_cors import CORS
 from datetime import datetime
+import os
+import base64
+from io import BytesIO
+try:
+    from screenshot_tool import ScreenshotSelector
+    SCREENSHOT_AVAILABLE = True
+except ImportError:
+    SCREENSHOT_AVAILABLE = False
 
 app = Flask(__name__)
 app.secret_key = 'blogtest'  # 用于session加密，务必换成复杂安全的字符串
@@ -178,6 +186,81 @@ def delete_article(title):
     finally:
         cursor.close()
         conn.close()
+
+@app.route('/api/screenshot/status')
+def screenshot_status():
+    """Check if screenshot functionality is available"""
+    return jsonify({
+        'available': SCREENSHOT_AVAILABLE,
+        'message': 'Screenshot tool is available' if SCREENSHOT_AVAILABLE else 'Screenshot tool not available'
+    })
+
+@app.route('/api/screenshot/capture', methods=['POST'])
+def capture_screenshot():
+    """API endpoint to capture screenshots with selection"""
+    if not SCREENSHOT_AVAILABLE:
+        return jsonify({'error': 'Screenshot functionality not available'}), 500
+    
+    try:
+        # For now, return a dummy response since we're in headless environment
+        # In a real environment with display, this would use the ScreenshotSelector
+        selector = ScreenshotSelector()
+        screenshot = selector.take_screenshot()
+        
+        if screenshot:
+            # Convert image to base64 for JSON response
+            buffer = BytesIO()
+            screenshot.save(buffer, format='PNG')
+            img_base64 = base64.b64encode(buffer.getvalue()).decode()
+            
+            return jsonify({
+                'success': True,
+                'image': img_base64,
+                'size': screenshot.size,
+                'message': 'Screenshot captured successfully'
+            })
+        else:
+            return jsonify({'error': 'Failed to capture screenshot'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Screenshot error: {str(e)}'}), 500
+
+@app.route('/api/screenshot/save', methods=['POST'])
+def save_screenshot():
+    """Save a screenshot image"""
+    if "username" not in session:
+        return jsonify({"message": "未登录"}), 401
+    
+    data = request.json
+    image_data = data.get('image_data')  # base64 encoded image
+    filename = data.get('filename', f'screenshot_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png')
+    
+    if not image_data:
+        return jsonify({'error': 'No image data provided'}), 400
+    
+    try:
+        # Decode base64 image
+        import base64
+        image_bytes = base64.b64decode(image_data)
+        
+        # Create screenshots directory if it doesn't exist
+        screenshots_dir = os.path.join(os.path.dirname(__file__), 'screenshots')
+        os.makedirs(screenshots_dir, exist_ok=True)
+        
+        # Save image
+        filepath = os.path.join(screenshots_dir, filename)
+        with open(filepath, 'wb') as f:
+            f.write(image_bytes)
+        
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'path': filepath,
+            'message': 'Screenshot saved successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to save screenshot: {str(e)}'}), 500
 
 
 
